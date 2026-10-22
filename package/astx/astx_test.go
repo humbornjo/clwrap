@@ -101,3 +101,45 @@ func TestAstx_ParseGenerated(t *testing.T) {
 		t.Fatal("generated file must render untouched")
 	}
 }
+
+func TestAstx_Extract(t *testing.T) {
+	src := "package p\n\n" +
+		"// D embeds the asset.\n" +
+		"//\n" +
+		"//go:embed all:dist\n" +
+		"// D renders after the build.\n" +
+		"var D int\n"
+
+	file, err := ParseFile("x.go", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runs []Area
+	for a := file.Next(); a != nil; a = file.Next() {
+		if a.Class() != CLASS_DECL {
+			t.Fatalf("run class = %v, want CLASS_DECL", a.Class())
+		}
+		runs = append(runs, a)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("runs = %d, want the 2 prose runs around the directive", len(runs))
+	}
+	for i, want := range []string{"// D embeds the asset.\n//", "// D renders after the build."} {
+		text, err := io.ReadAll(runs[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(text) != want {
+			t.Fatalf("run %d = %q, want %q", i, text, want)
+		}
+	}
+
+	// An override rewrites only its own run: the directive between the runs renders verbatim.
+	if _, err := runs[0].Write([]byte("// D embeds the asset, wrapped.\n//")); err != nil {
+		t.Fatal(err)
+	}
+	out := string(file.Source())
+	if !strings.Contains(out, "// D embeds the asset, wrapped.\n//\n//go:embed all:dist\n// D renders after the build.\nvar D int\n") {
+		t.Fatalf("directive line did not survive the override:\n%s", out)
+	}
+}

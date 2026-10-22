@@ -153,6 +153,20 @@ func TestRule_Pipe(t *testing.T) {
 			long:  100,
 		},
 		{
+			name: "directive splits the doc group",
+			src: "// D embeds the asset for the binary build, produced by the make step.\n" +
+				"//\n" +
+				"//go:embed all:dist\n" +
+				"var D embed.FS\n",
+			want: "// D embeds the asset for the binary build, produced by the\n" +
+				"// make step.\n" +
+				"//\n" +
+				"//go:embed all:dist\n" +
+				"var D embed.FS\n",
+			short: 60,
+			long:  100,
+		},
+		{
 			name:  "trailing comment untouched",
 			src:   "func Run() {\n\tx := 1 // a trailing comment keeps its place even when it runs past any width at all\n\t_ = x\n}\n",
 			want:  "func Run() {\n\tx := 1 // a trailing comment keeps its place even when it runs past any width at all\n\t_ = x\n}\n",

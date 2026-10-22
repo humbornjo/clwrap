@@ -1,5 +1,5 @@
 // Package astx wraps go/ast to stream a Go file's comment areas: ParseFile
-// yields a File whose Next hands out each reflowable comment group as an
+// yields a File whose Next hands out each reflowable comment run as an
 // Area — a single-shot io.Reader over the original text and a
 // single-shot io.Writer whose one write overrides the region — until
 // Next returns nil. Source then renders the file with every override
@@ -30,11 +30,11 @@ const (
 	CLASS_INNER
 )
 
-// Area is one comment group's source region. Read streams the original
-// text — leading indent included — exactly once; the drained stream
-// reports io.EOF. Write accepts exactly one call, and the write overrides
-// the region: the bytes given replace the original text when the file
-// renders.
+// Area is one comment run's source region: a maximal stretch of prose
+// lines between directive lines. Read streams the original text —
+// leading indent included — exactly once; the drained stream reports
+// io.EOF. Write accepts exactly one call, and the write overrides the
+// region: the bytes given replace the original text when the file renders.
 type Area interface {
 	io.Reader
 	io.Writer
@@ -69,9 +69,7 @@ func ParseFile(name string, src []byte) (*File, error) {
 		return f, nil
 	}
 	for _, group := range file.Comments {
-		if a := extract(fset, file, src, group); a != nil {
-			f.areas = append(f.areas, a)
-		}
+		f.areas = append(f.areas, extract(fset, file, src, group)...)
 	}
 	return f, nil
 }
@@ -105,7 +103,7 @@ func (f *File) Source() []byte {
 	return out
 }
 
-// area is one comment group's source region: the original text plus the
+// area is one comment run's source region: the original text plus the
 // single override, when written.
 type area struct {
 	class Class
@@ -142,28 +140,40 @@ func (a *area) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// extract lifts one comment group into an area, or returns nil when the
-// group is no reflow candidate: block comments, trailing comments sharing
-// a code line, and groups holding directive-style lines all keep their
-// author's layout.
-func extract(fset *token.FileSet, file *ast.File, src []byte, group *ast.CommentGroup) *area {
+// extract lifts one comment group into its reflowable runs: block comments
+// and trailing comments sharing a code line keep their author's layout,
+// and a directive-style line splits the group — the prose runs between
+// directives reflow, the directive lines themselves stay untouched.
+func extract(fset *token.FileSet, file *ast.File, src []byte, group *ast.CommentGroup) []*area {
 	first := group.List[0]
 	if strings.HasPrefix(first.Text, "/*") {
 		return nil
 	}
 	pos := fset.Position(first.Slash)
-	start := pos.Offset - (pos.Column - 1)
-	if strings.TrimSpace(string(src[start:pos.Offset])) != "" {
+	if strings.TrimSpace(string(src[pos.Offset-(pos.Column-1):pos.Offset])) != "" {
 		return nil
 	}
+	class := classify(file, group)
+	var areas []*area
+	from, end := -1, 0
 	for _, c := range group.List {
-		body := strings.TrimPrefix(c.Text, "//")
-		if body != "" && !strings.HasPrefix(body, " ") {
-			return nil
+		if body := strings.TrimPrefix(c.Text, "//"); body != "" && !strings.HasPrefix(body, " ") {
+			if from >= 0 {
+				areas = append(areas, &area{class: class, start: from, end: end, src: src[from:end]})
+				from = -1
+			}
+			continue
 		}
+		if from < 0 {
+			slash := fset.Position(c.Slash)
+			from = slash.Offset - (slash.Column - 1)
+		}
+		end = fset.Position(c.End()).Offset
 	}
-	end := fset.Position(group.End()).Offset
-	return &area{class: classify(file, group), start: start, end: end, src: src[start:end]}
+	if from >= 0 {
+		areas = append(areas, &area{class: class, start: from, end: end, src: src[from:end]})
+	}
+	return areas
 }
 
 // classify reports the comment group's tier: doc comments attached to

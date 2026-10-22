@@ -9,7 +9,7 @@ Reflows Go line comments under two width constraints, using go/ast for classific
 
 Generated files (`// Code generated … DO NOT EDIT.`) are never rewritten; stdout mode passes them through whole.
 
-Left untouched: trailing comments on code lines, `/* */` block comments, groups holding directive-style lines (`//go:…`, `//nolint`, …), and structured paragraphs inside a reflowed group (code blocks, doc link definitions, prose-led paragraphs that mix text with list items).
+Left untouched: trailing comments on code lines, `/* */` block comments, directive-style lines themselves (`//go:…`, `//nolint`, …) — a directive splits its group and the prose runs around it still reflow — and structured paragraphs inside a reflowed group (code blocks, doc link definitions, prose-led paragraphs that mix text with list items).
 
 ## Usage
 
@@ -29,7 +29,7 @@ A stream pipeline: the ast wrapper extracts comment areas, the rule set transfor
 - `main.go` — CLI wiring only (urfave/cli/v3, the fuss command pattern)
 - `config/` — the rule configuration: Decl width + Tolerance, Inner width, List budget
 - `command/fmt` — the command action: arg walking, file/stdin/dir IO, exit codes, pipeline composition
-- `package/astx` — the go/ast wrapper: `ParseFile` yields a `File` whose `Next()` streams each reflowable comment group as an `Area` (a single-shot `io.Reader`; its one `Write` overrides the region) until nil; `Source()` renders the result
+- `package/astx` — the go/ast wrapper: `ParseFile` yields a `File` whose `Next()` streams each reflowable comment run — a prose stretch between directive lines — as an `Area` (a single-shot `io.Reader`; its one `Write` overrides the region) until nil; `Source()` renders the result
 - `package/rule` — `Rule` + `Set` chain and the `Pipe` stream driver; `Width` carries the tier boundaries with the straddle tolerance, `List` owns markdown list items
 
 ## Neovim
