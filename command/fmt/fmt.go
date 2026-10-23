@@ -7,103 +7,45 @@ package cmdfmt
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/urfave/cli/v3"
 
+	"gommentlw/command/walk"
 	"gommentlw/config"
 	"gommentlw/package/astx"
 	"gommentlw/package/rule"
 )
 
-// Run formats every positional arg the command received, reporting each
-// failure on stderr and exiting 2 when any arg failed.
+// Run formats every positional arg the command received, reporting the
+// failures on stderr and exiting 2 when any arg failed.
 func Run(_ context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() == 0 {
-		return cli.Exit("no input: gommentlw [-w] [-decl N] [-inner N] [-tolerance N] [-list N] <file.go | dir | dir/... | ->...", 2)
+		return cli.Exit("no input: gommentlw [-w] [-dryrun] [-decl N] [-inner N] [-tolerance N] [-list N] <file.go | dir | dir/... | ->...", 2)
 	}
-	write, cfg := cmd.Bool("write"), config.Default()
+	write, dry, cfg := cmd.Bool("write"), cmd.Bool("dryrun"), config.Default()
 	cfg.Decl, cfg.Inner, cfg.List, cfg.Tolerance = cmd.Int("decl"), cmd.Int("inner"), cmd.Int("list"), cmd.Int("tolerance")
 
-	failed := false
-	for _, arg := range cmd.Args().Slice() {
-		if arg == "-" {
-			if err := processStdin(cfg); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				failed = true
-			}
-			continue
+	err := walk.Args(cmd.Args().Slice(), func(path string) error {
+		if path == "-" {
+			return processStdin(cfg)
 		}
-		if root, recursive := strings.CutSuffix(arg, "/..."); recursive {
-			if root == "" {
-				root = "."
-			}
-			if err := walkDir(root, write, cfg); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				failed = true
-			}
-			continue
-		}
-		info, err := os.Stat(arg)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			failed = true
-			continue
-		}
-		if info.IsDir() {
-			if err := walkDir(arg, write, cfg); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				failed = true
-			}
-			continue
-		}
-		if err := processFile(arg, write, cfg); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			failed = true
-		}
-	}
-	if failed {
+		return processFile(path, write, dry, cfg)
+	})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return cli.Exit("", 2)
 	}
 	return nil
 }
 
-// walkDir processes every .go file beneath root and joins the failures.
-// Like the go tool, directories starting with a dot or an underscore are
-// ignored, vendor and testdata too.
-func walkDir(root string, write bool, cfg config.Config) error {
-	var errs []error
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if path != root {
-				if name := d.Name(); strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "vendor" || name == "testdata" {
-					return filepath.SkipDir
-				}
-			}
-			return nil
-		}
-		if strings.HasSuffix(path, ".go") {
-			if err := processFile(path, write, cfg); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		return nil
-	})
-	return errors.Join(append(errs, err)...)
-}
-
-// processFile formats one file: stdout mode prints the reflowed source,
-// write mode rewrites changed files in place and lists them on stderr.
-func processFile(path string, write bool, cfg config.Config) error {
+// processFile formats one file: dry mode lists the files whose comments
+// would change on stdout and writes nothing, stdout mode prints the
+// reflowed source, write mode rewrites changed files in place and lists
+// them on stderr.
+func processFile(path string, write, dry bool, cfg config.Config) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -111,6 +53,12 @@ func processFile(path string, write bool, cfg config.Config) error {
 	out, err := format(path, src, cfg)
 	if err != nil {
 		return err
+	}
+	if dry {
+		if !bytes.Equal(out, src) {
+			fmt.Fprintln(os.Stdout, path)
+		}
+		return nil
 	}
 	if !write {
 		_, err := os.Stdout.Write(out)
