@@ -22,7 +22,7 @@ gommentlw - < file.go        # stdin → stdout, the editor-integration path
 gommentlw report ./...       # per-package comment hygiene table, tokei style
 ```
 
-The `report` subcommand formats in memory, writes nothing, and tallies the comment-line change per Go package: files seen, files the reflow would rewrite, comment lines before/after, and the signed diff — the most changed packages first, `--limit N` rows (default 10, 0 = all) with the rest folded into an `other` row. It accepts the same width flags; stdin is not a report input.
+The `report` subcommand formats in memory, writes nothing, and tallies the comment-line change per Go package: files seen, files the reflow would rewrite, comment lines before/after, and the signed diff — the most changed packages first, `--limit N` rows (default 10, 0 = all) with the rest folded into an `other` row. The table is styled after tokei: `━` rules spanning the terminal width, ANSI colors on a terminal (`NO_COLOR` disables). It accepts the same width flags; stdin is not a report input.
 
 Args are files, directories, `dir/...` recursive patterns, or `-` for stdin. Directory walks ignore dot/underscore directories, `vendor`, and `testdata`, per the go tool convention. Flags: `--decl N` (75), `--tolerance N` (0), `--inner N` (120), `--list N` (0), `-w`/`--write`, `-d`/`--dryrun`. Output is idempotent and gofmt-stable.
 

@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v3"
+	"golang.org/x/term"
 
 	"gommentlw/command/walk"
 	"gommentlw/config"
@@ -61,7 +62,12 @@ func Run(_ context.Context, cmd *cli.Command) error {
 		fmt.Fprintln(os.Stderr, err)
 		return cli.Exit("", 2)
 	}
-	render(os.Stdout, stats, int(cmd.Int("limit")))
+	fd := int(os.Stdout.Fd())
+	columns := 80
+	if w, _, err := term.GetSize(fd); err == nil && w > 0 {
+		columns = w
+	}
+	render(os.Stdout, stats, int(cmd.Int("limit")), columns, term.IsTerminal(fd) && os.Getenv("NO_COLOR") == "")
 	return nil
 }
 
@@ -127,10 +133,79 @@ func format(name string, src []byte, cfg config.Config) ([]byte, error) {
 	return file.Source(), nil
 }
 
-// render prints the per-package table, tokei style: the limit most changed
-// packages in descending order, an "other" row folding the rest away, and
-// the total over every package seen. A limit of 0 shows all.
-func render(w io.Writer, stats map[string]*stat, limit int) {
+// Column widths, tokei's: Files is narrower than the rest, and the name
+// column takes the terminal width left over by the numbers and gaps (63).
+const (
+	filesWidth = 8
+	numWidth   = 12
+)
+
+// table renders the report tokei style: ━ separators spanning the
+// terminal width, the header in bold blue, package names in bold magenta,
+// and the total's numbers in blue — colors only on a terminal.
+type table struct {
+	w     io.Writer
+	color bool
+	nw    int
+	sep   string
+}
+
+// newTable sizes the name column so the table fills columns wide.
+func newTable(w io.Writer, columns int, color bool) *table {
+	return &table{w: w, color: color, nw: max(columns-63, len("Package")), sep: strings.Repeat("━", columns)}
+}
+
+// paint wraps s in an ANSI color when the table renders to a terminal.
+func (t *table) paint(code, s string) string {
+	if !t.color || code == "" {
+		return s
+	}
+	return "\x1b[" + code + "m" + s + "\x1b[0m"
+}
+
+// header prints the column titles in bold blue between two rules.
+func (t *table) header() {
+	fmt.Fprintln(t.w, t.sep)
+	fmt.Fprintf(t.w, " %s %s %s %s %s %s\n",
+		t.paint("1;34", fmt.Sprintf("%-*s", t.nw, "Package")),
+		t.paint("1;34", fmt.Sprintf("%*s", filesWidth, "Files")),
+		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Dirty")),
+		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Before")),
+		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "After")),
+		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Diff")),
+	)
+	fmt.Fprintln(t.w, t.sep)
+}
+
+// line prints one tally row: the package name in bold magenta, truncated
+// with a trailing | when it overflows as tokei does, the numbers plain —
+// or blue on the total row — and the diff signed when nonzero.
+func (t *table) line(name string, s *stat, total bool) {
+	if r := []rune(name); len(r) > t.nw {
+		name = string(r[:t.nw-1]) + "|"
+	}
+	code := ""
+	if total {
+		code = "34"
+	}
+	diff := fmt.Sprintf("%*d", numWidth, 0)
+	if d := s.after - s.before; d != 0 {
+		diff = fmt.Sprintf("%+*d", numWidth, d)
+	}
+	fmt.Fprintf(t.w, " %s %s %s %s %s %s\n",
+		t.paint("1;35", fmt.Sprintf("%-*s", t.nw, name)),
+		t.paint(code, fmt.Sprintf("%*d", filesWidth, s.files)),
+		t.paint(code, fmt.Sprintf("%*d", numWidth, s.dirty)),
+		t.paint(code, fmt.Sprintf("%*d", numWidth, s.before)),
+		t.paint(code, fmt.Sprintf("%*d", numWidth, s.after)),
+		t.paint(code, diff),
+	)
+}
+
+// render prints the per-package table: the limit most changed packages in
+// descending order, an "other" row folding the rest away, and the total
+// over every package seen between two rules. A limit of 0 shows all.
+func render(w io.Writer, stats map[string]*stat, limit, columns int, color bool) {
 	type row struct {
 		name string
 		s    *stat
@@ -172,34 +247,15 @@ func render(w io.Writer, stats map[string]*stat, limit int) {
 		otherName = "other (1 package)"
 	}
 
-	nw := len("Package")
-	for _, name := range []string{otherName, "Total"} {
-		nw = max(nw, len(name))
-	}
+	t := newTable(w, columns, color)
+	t.header()
 	for _, r := range shown {
-		nw = max(nw, len(r.name))
-	}
-	line := strings.Repeat("=", nw+49)
-	fmt.Fprintln(w, line)
-	fmt.Fprintf(w, " %-*s %7s %7s %7s %7s %7s\n", nw, "Package", "Files", "Dirty", "Before", "After", "Diff")
-	fmt.Fprintln(w, line)
-	for _, r := range shown {
-		printRow(w, nw, r.name, r.s)
+		t.line(r.name, r.s, false)
 	}
 	if other.files > 0 {
-		printRow(w, nw, otherName, &other)
+		t.line(otherName, &other, false)
 	}
-	fmt.Fprintln(w, line)
-	printRow(w, nw, "Total", &total)
-	fmt.Fprintln(w, line)
-}
-
-// printRow prints one table line: the package name and its tallies, the
-// diff signed when nonzero.
-func printRow(w io.Writer, nw int, name string, s *stat) {
-	diff := "      0"
-	if d := s.after - s.before; d != 0 {
-		diff = fmt.Sprintf("%+7d", d)
-	}
-	fmt.Fprintf(w, " %-*s %7d %7d %7d %7d %s\n", nw, name, s.files, s.dirty, s.before, s.after, diff)
+	fmt.Fprintln(t.w, t.sep)
+	t.line("Total", &total, true)
+	fmt.Fprintln(t.w, t.sep)
 }
