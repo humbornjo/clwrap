@@ -14,10 +14,10 @@ import (
 type Class int
 
 const (
-	// Decl marks documentation attached to a top-level named declaration.
-	Decl Class = iota
-	// Inner marks every other standalone comment.
-	Inner
+	// CLASS_DOC marks documentation attached to a top-level named declaration.
+	CLASS_DOC Class = iota
+	// CLASS_COMMENT marks every other standalone comment.
+	CLASS_COMMENT
 )
 
 // Area is one comment run's source region. Read streams the original text

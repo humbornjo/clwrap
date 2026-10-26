@@ -9,11 +9,11 @@ import (
 	treesitterzig "github.com/tree-sitter-grammars/tree-sitter-zig/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 
-	"clwrap/package/astx/lang/tree"
+	"clwrap/package/astx/lang/internal/tree"
 	"clwrap/package/comment"
 )
 
-var spec = tree.Spec{
+var _SPEC = tree.Spec{
 	Name:      "Zig",
 	IsComment: commentKind,
 	Marker:    marker,
@@ -26,7 +26,7 @@ type Parser struct{}
 
 // Parse implements astx.Parser for Zig source.
 func (Parser) Parse(name string, src []byte) (*comment.File, error) {
-	return tree.Parse(name, src, sitter.NewLanguage(treesitterzig.Language()), spec)
+	return tree.Parse(name, src, sitter.NewLanguage(treesitterzig.Language()), _SPEC)
 }
 
 func commentKind(kind string) bool {
@@ -60,19 +60,19 @@ func directive(text string) bool {
 	return strings.HasPrefix(body, "zig fmt:")
 }
 
-// classify marks a comment group Decl only when a named root-level
+// classify marks a comment group CLASS_DOC only when a named root-level
 // declaration immediately follows it. Container-level //! comments remain
-// Inner.
+// CLASS_COMMENT.
 func classify(last *sitter.Node, endRow uint) comment.Class {
 	parent := last.Parent()
 	if parent == nil || parent.Kind() != "source_file" {
-		return comment.Inner
+		return comment.CLASS_COMMENT
 	}
 	next := last.NextNamedSibling()
 	if next == nil || next.StartPosition().Row != endRow+1 || !namedDeclaration(next) {
-		return comment.Inner
+		return comment.CLASS_COMMENT
 	}
-	return comment.Decl
+	return comment.CLASS_DOC
 }
 
 // namedDeclaration recognizes named root-level Zig declarations.

@@ -29,7 +29,7 @@ type registration struct {
 	parser     Parser
 }
 
-var registrations = []registration{
+var _REGISTRATIONS = []registration{
 	{name: "go", extensions: []string{".go"}, parser: golang.Parser{}},
 	{name: "typescript", aliases: []string{"ts"}, extensions: []string{".ts", ".mts", ".cts"}, parser: typescript.Parser{}},
 	{name: "tsx", extensions: []string{".tsx"}, parser: typescript.TSXParser{}},
@@ -58,8 +58,8 @@ func Parse(name string, src []byte) (*comment.File, error) {
 // typescript.
 func ParseAs(languageName, name string, src []byte) (*comment.File, error) {
 	languageName = strings.ToLower(languageName)
-	for i := range registrations {
-		registration := &registrations[i]
+	for i := range _REGISTRATIONS {
+		registration := &_REGISTRATIONS[i]
 		if languageName == registration.name {
 			return registration.parser.Parse(name, src)
 		}
@@ -86,8 +86,8 @@ func CommentLines(name string, src []byte) (int, error) {
 // extension.
 func forExtension(name string) (*registration, bool) {
 	extension := strings.ToLower(filepath.Ext(name))
-	for i := range registrations {
-		registration := &registrations[i]
+	for i := range _REGISTRATIONS {
+		registration := &_REGISTRATIONS[i]
 		for _, candidate := range registration.extensions {
 			if extension == candidate {
 				return registration, true

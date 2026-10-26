@@ -13,7 +13,7 @@ import (
 	"clwrap/package/comment"
 )
 
-var GENERATED_MARKER = regexp.MustCompile(`(?m)^// Code generated .* DO NOT EDIT\.$`)
+var _GENERATED_MARKER = regexp.MustCompile(`(?m)^// Code generated .* DO NOT EDIT\.$`)
 
 // Parser adapts go/ast to the shared source-parser contract.
 type Parser struct{}
@@ -30,7 +30,7 @@ func (Parser) Parse(name string, src []byte) (*comment.File, error) {
 	if len(head) > 4096 {
 		head = head[:4096]
 	}
-	generated := GENERATED_MARKER.Match(head)
+	generated := _GENERATED_MARKER.Match(head)
 	var regions []comment.Region
 	commentLines := 0
 	for _, group := range file.Comments {
@@ -78,38 +78,39 @@ func extract(fset *token.FileSet, file *ast.File, src []byte, group *ast.Comment
 }
 
 // classify reports the comment group's tier: doc comments attached to
-// package-level named declarations are Decl; every other group is Inner.
+// package-level named declarations are CLASS_DOC; every other group is
+// CLASS_COMMENT.
 func classify(file *ast.File, group *ast.CommentGroup) comment.Class {
 	if file.Doc == group {
-		return comment.Decl
+		return comment.CLASS_DOC
 	}
 	for _, decl := range file.Decls {
 		switch d := decl.(type) {
 		case *ast.FuncDecl:
 			if d.Doc == group {
-				return comment.Decl
+				return comment.CLASS_DOC
 			}
 		case *ast.GenDecl:
 			if d.Doc == group {
-				return comment.Decl
+				return comment.CLASS_DOC
 			}
 			for _, spec := range d.Specs {
 				switch s := spec.(type) {
 				case *ast.ImportSpec:
 					if s.Doc == group {
-						return comment.Decl
+						return comment.CLASS_DOC
 					}
 				case *ast.ValueSpec:
 					if s.Doc == group {
-						return comment.Decl
+						return comment.CLASS_DOC
 					}
 				case *ast.TypeSpec:
 					if s.Doc == group {
-						return comment.Decl
+						return comment.CLASS_DOC
 					}
 				}
 			}
 		}
 	}
-	return comment.Inner
+	return comment.CLASS_COMMENT
 }

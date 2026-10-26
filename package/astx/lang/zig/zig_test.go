@@ -109,7 +109,7 @@ func TestZig_Classification(t *testing.T) {
 		classes = append(classes, area.Class())
 		markers = append(markers, area.Marker())
 	}
-	wantClasses := []comment.Class{comment.Inner, comment.Decl, comment.Decl, comment.Inner, comment.Decl}
+	wantClasses := []comment.Class{comment.CLASS_COMMENT, comment.CLASS_DOC, comment.CLASS_DOC, comment.CLASS_COMMENT, comment.CLASS_DOC}
 	wantMarkers := []string{"//", "///", "///", "///", "///"}
 	if len(classes) != len(wantClasses) {
 		t.Fatalf("areas = %d, want %d; classes = %v", len(classes), len(wantClasses), classes)

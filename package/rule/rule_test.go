@@ -242,13 +242,13 @@ func TestRule_Pipe(t *testing.T) {
 }
 
 func TestRule_ExemptedPrefixes(t *testing.T) {
-	const src = "package p\n\n" +
+	const SRC = "package p\n\n" +
 		"// Run demonstrates configurable prefix exemptions.\n" +
 		"//\n" +
 		"// > quoted text keeps\n" +
 		"// > its original layout.\n" +
 		"func Run() {}\n"
-	file, err := (golang.Parser{}).Parse("x.go", []byte(src))
+	file, err := (golang.Parser{}).Parse("x.go", []byte(SRC))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,8 +257,8 @@ func TestRule_ExemptedPrefixes(t *testing.T) {
 	if err := Apply(file, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if got := string(file.Source()); got != src {
-		t.Fatalf("source = %q, want unchanged %q", got, src)
+	if got := string(file.Source()); got != SRC {
+		t.Fatalf("source = %q, want unchanged %q", got, SRC)
 	}
 }
 
@@ -267,7 +267,7 @@ func TestRule_Marker(t *testing.T) {
 	file := comment.NewFile([]byte(src), []comment.Region{{
 		Start:  0,
 		End:    len(src) - 1,
-		Class:  comment.Inner,
+		Class:  comment.CLASS_COMMENT,
 		Marker: "#",
 	}}, 2)
 	if err := Pipe(file, Set{Width{Inner: 80}}); err != nil {

@@ -31,7 +31,7 @@ clwrap report ./...        # per-directory comment hygiene table, tokei style
 
 Supported extensions are `.go`, `.ts`, `.mts`, `.cts`, `.tsx`, `.rs`, and `.zig`. Explicit files with other extensions are rejected rather than parsed as Go. `--lang` selects the stdin grammar and accepts `go`, `typescript` (or `ts`), `tsx`, `rust`, and `zig`.
 
-The `report` subcommand formats in memory, writes nothing, and tallies the comment-line change per directory: files seen, files the reflow would rewrite, comment lines before/after, and the signed diff — the most changed directories first. `--limit N` selects the number of rows (default 10, 0 = all), with the rest folded into an `other` row. The table is styled after tokei: `━` rules spanning the terminal width, ANSI colors on a terminal (`NO_COLOR` disables). It accepts the same width flags; stdin is not a report input.
+The `report` subcommand formats in memory, writes nothing, and tallies the comment-line change per directory: files seen, files the reflow would rewrite, comment lines before/after, and the signed diff — the most changed directories first. Only directories containing files the reflow would rewrite get rows; the total still covers every supported file. `--limit N` selects the number of rows (default 10, 0 = all), with the rest folded into an `other` row. The table is styled after tokei: `━` rules spanning the terminal width, ANSI colors on a terminal (`NO_COLOR` disables). It accepts the same width flags; stdin is not a report input.
 
 Args are files, directories, `dir/...` recursive patterns, or `-` for stdin. Directory walks ignore dot/underscore directories, `vendor`, `node_modules`, and `testdata`. Flags: `--decl N` (75), `--tolerance N` (0), `--inner N` (120), `-w`/`--write`, `-d`/`--dryrun`, and `--lang` for stdin. Output is idempotent; Go output remains gofmt-stable.
 
@@ -43,13 +43,13 @@ A stream pipeline: a language adapter extracts comment areas, the rule set trans
 
 - `main.go` — CLI wiring only (urfave/cli/v3, the fuss command pattern)
 - `config/` — the rule configuration: DocWidth + Tolerance, CommentWidth, ExemptedPrefixes
-- `command/walk` — positional-arg expansion and supported-file discovery
+- `command/internal/walk` — positional-arg expansion and supported-file discovery
 - `command/fmt` — file/stdin IO, exit codes, and pipeline invocation
 - `command/report` — in-memory format, per-directory tally, tokei-style table
 - `package/comment` — language-neutral classes, areas, comment streams, and byte-range replacement
 - `package/astx` — the `Parser` interface, adapter registry, extension detection, and explicit language selection
 - `package/astx/lang/go` — the Go adapter using `go/ast`
-- `package/astx/lang/tree` — grammar-neutral Tree-sitter traversal, grouping, and span handling; adapters inject language policy
+- `package/astx/lang/internal/tree` — grammar-neutral Tree-sitter traversal, grouping, and span handling; adapters inject language policy
 - `package/astx/lang/typescript` — the TypeScript and TSX adapter using Tree-sitter
 - `package/astx/lang/rust` — the Rust adapter, including doc markers, rustfmt directives, and declaration classification
 - `package/astx/lang/zig` — the Zig adapter, including doc markers, zig fmt directives, and declaration classification

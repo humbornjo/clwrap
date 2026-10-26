@@ -127,17 +127,17 @@ func TestTypescript_Classification(t *testing.T) {
 		got = append(got, area.Class())
 	}
 	want := []comment.Class{
-		comment.Inner,
-		comment.Decl,
-		comment.Decl,
-		comment.Inner,
-		comment.Decl,
-		comment.Decl,
-		comment.Decl,
-		comment.Decl,
-		comment.Decl,
-		comment.Inner,
-		comment.Inner,
+		comment.CLASS_COMMENT,
+		comment.CLASS_DOC,
+		comment.CLASS_DOC,
+		comment.CLASS_COMMENT,
+		comment.CLASS_DOC,
+		comment.CLASS_DOC,
+		comment.CLASS_DOC,
+		comment.CLASS_DOC,
+		comment.CLASS_DOC,
+		comment.CLASS_COMMENT,
+		comment.CLASS_COMMENT,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("classes = %v, want %v", got, want)

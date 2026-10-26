@@ -35,7 +35,7 @@ func TestGolang_File(t *testing.T) {
 		}
 		classes = append(classes, area.Class())
 	}
-	want := []comment.Class{comment.Decl, comment.Decl, comment.Inner}
+	want := []comment.Class{comment.CLASS_DOC, comment.CLASS_DOC, comment.CLASS_COMMENT}
 	if len(classes) != len(want) {
 		t.Fatalf("areas = %v, want %v (trailing, directive and block groups must not extract)", classes, want)
 	}
@@ -118,8 +118,8 @@ func TestGolang_Extract(t *testing.T) {
 	}
 	var runs []comment.Area
 	for a := file.Next(); a != nil; a = file.Next() {
-		if a.Class() != comment.Decl {
-			t.Fatalf("run class = %v, want Decl", a.Class())
+		if a.Class() != comment.CLASS_DOC {
+			t.Fatalf("run class = %v, want CLASS_DOC", a.Class())
 		}
 		runs = append(runs, a)
 	}

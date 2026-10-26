@@ -18,7 +18,7 @@ import (
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 
-	"clwrap/command/walk"
+	"clwrap/command/internal/walk"
 	"clwrap/config"
 	"clwrap/package/astx"
 	"clwrap/package/rule"
@@ -107,8 +107,8 @@ func collect(path string, cfg config.Config, stats map[string]*stat) error {
 // Column widths, tokei's: Files is narrower than the rest, and the name
 // column takes the terminal width left over by the numbers and gaps (63).
 const (
-	filesWidth = 8
-	numWidth   = 12
+	_FILES_WIDTH = 8
+	_NUM_WIDTH   = 12
 )
 
 // table renders the report tokei style: ━ separators spanning the
@@ -139,11 +139,11 @@ func (t *table) header() {
 	fmt.Fprintln(t.w, t.sep)
 	fmt.Fprintf(t.w, " %s %s %s %s %s %s\n",
 		t.paint("1;34", fmt.Sprintf("%-*s", t.nw, "Directory")),
-		t.paint("1;34", fmt.Sprintf("%*s", filesWidth, "Files")),
-		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Dirty")),
-		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Before")),
-		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "After")),
-		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Diff")),
+		t.paint("1;34", fmt.Sprintf("%*s", _FILES_WIDTH, "Files")),
+		t.paint("1;34", fmt.Sprintf("%*s", _NUM_WIDTH, "Dirty")),
+		t.paint("1;34", fmt.Sprintf("%*s", _NUM_WIDTH, "Before")),
+		t.paint("1;34", fmt.Sprintf("%*s", _NUM_WIDTH, "After")),
+		t.paint("1;34", fmt.Sprintf("%*s", _NUM_WIDTH, "Diff")),
 	)
 	fmt.Fprintln(t.w, t.sep)
 }
@@ -159,31 +159,36 @@ func (t *table) line(name string, s *stat, total bool) {
 	if total {
 		code = "34"
 	}
-	diff := fmt.Sprintf("%*d", numWidth, 0)
+	diff := fmt.Sprintf("%*d", _NUM_WIDTH, 0)
 	if d := s.after - s.before; d != 0 {
-		diff = fmt.Sprintf("%+*d", numWidth, d)
+		diff = fmt.Sprintf("%+*d", _NUM_WIDTH, d)
 	}
 	fmt.Fprintf(t.w, " %s %s %s %s %s %s\n",
 		t.paint("1;35", fmt.Sprintf("%-*s", t.nw, name)),
-		t.paint(code, fmt.Sprintf("%*d", filesWidth, s.files)),
-		t.paint(code, fmt.Sprintf("%*d", numWidth, s.dirty)),
-		t.paint(code, fmt.Sprintf("%*d", numWidth, s.before)),
-		t.paint(code, fmt.Sprintf("%*d", numWidth, s.after)),
+		t.paint(code, fmt.Sprintf("%*d", _FILES_WIDTH, s.files)),
+		t.paint(code, fmt.Sprintf("%*d", _NUM_WIDTH, s.dirty)),
+		t.paint(code, fmt.Sprintf("%*d", _NUM_WIDTH, s.before)),
+		t.paint(code, fmt.Sprintf("%*d", _NUM_WIDTH, s.after)),
 		t.paint(code, diff),
 	)
 }
 
-// render prints the per-directory table: the limit most changed
-// directories in descending order, an "other" row folding the rest away,
-// and the total over every directory seen between two rules. A limit of 0
-// shows all.
+// render prints the most changed directories in descending order, an "other"
+// row folding away those beyond limit, and the total over every directory
+// seen. Unchanged directories only contribute to the total. A limit of 0 shows
+// all changed directories.
 func render(w io.Writer, stats map[string]*stat, limit, columns int, color bool) {
 	type row struct {
 		name string
 		s    *stat
 	}
 	rows := make([]row, 0, len(stats))
+	var total stat
 	for name, s := range stats {
+		total.add(s)
+		if s.dirty == 0 {
+			continue
+		}
 		rows = append(rows, row{name, s})
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -203,16 +208,13 @@ func render(w io.Writer, stats map[string]*stat, limit, columns int, color bool)
 		return rows[i].name < rows[j].name
 	})
 
-	var other, total stat
+	var other stat
 	shown := rows
 	if limit > 0 && len(rows) > limit {
 		for _, r := range rows[limit:] {
 			other.add(r.s)
 		}
 		shown = rows[:limit]
-	}
-	for _, r := range rows {
-		total.add(r.s)
 	}
 	otherName := fmt.Sprintf("other (%d directories)", len(rows)-len(shown))
 	if len(rows)-len(shown) == 1 {

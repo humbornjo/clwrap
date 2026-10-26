@@ -9,11 +9,11 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	treesitterrust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 
-	"clwrap/package/astx/lang/tree"
+	"clwrap/package/astx/lang/internal/tree"
 	"clwrap/package/comment"
 )
 
-var spec = tree.Spec{
+var _SPEC = tree.Spec{
 	Name:      "Rust",
 	IsComment: commentKind,
 	Marker:    marker,
@@ -27,7 +27,7 @@ type Parser struct{}
 
 // Parse implements astx.Parser for Rust source.
 func (Parser) Parse(name string, src []byte) (*comment.File, error) {
-	return tree.Parse(name, src, sitter.NewLanguage(treesitterrust.Language()), spec)
+	return tree.Parse(name, src, sitter.NewLanguage(treesitterrust.Language()), _SPEC)
 }
 
 func commentKind(kind string) bool {
@@ -61,26 +61,26 @@ func directive(text string) bool {
 	return strings.HasPrefix(body, "rustfmt::")
 }
 
-// classify marks a root-level comment group Decl when a named item follows
+// classify marks a root-level comment group CLASS_DOC when a named item follows
 // it. Outer attributes may sit between the documentation and its item.
 func classify(last *sitter.Node, endRow uint) comment.Class {
 	parent := last.Parent()
 	if parent == nil || parent.Kind() != "source_file" {
-		return comment.Inner
+		return comment.CLASS_COMMENT
 	}
 	row := endRow
 	next := last.NextNamedSibling()
 	for next != nil && next.Kind() == "attribute_item" {
 		if next.StartPosition().Row != row+1 {
-			return comment.Inner
+			return comment.CLASS_COMMENT
 		}
 		row = next.EndPosition().Row
 		next = next.NextNamedSibling()
 	}
 	if next == nil || next.StartPosition().Row != row+1 || !namedDeclaration(next) {
-		return comment.Inner
+		return comment.CLASS_COMMENT
 	}
-	return comment.Decl
+	return comment.CLASS_DOC
 }
 
 // namedDeclaration recognizes root-level Rust items that introduce a name.

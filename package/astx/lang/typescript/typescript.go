@@ -9,11 +9,11 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	treesittertypescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
-	"clwrap/package/astx/lang/tree"
+	"clwrap/package/astx/lang/internal/tree"
 	"clwrap/package/comment"
 )
 
-var spec = tree.Spec{
+var _SPEC = tree.Spec{
 	Name:      "TypeScript",
 	IsComment: commentKind,
 	Marker:    marker,
@@ -27,7 +27,7 @@ type Parser struct{}
 
 // Parse implements astx.Parser for TypeScript source.
 func (Parser) Parse(name string, src []byte) (*comment.File, error) {
-	return tree.Parse(name, src, sitter.NewLanguage(treesittertypescript.LanguageTypescript()), spec)
+	return tree.Parse(name, src, sitter.NewLanguage(treesittertypescript.LanguageTypescript()), _SPEC)
 }
 
 // TSXParser adapts the TSX Tree-sitter grammar to the shared parser
@@ -36,7 +36,7 @@ type TSXParser struct{}
 
 // Parse implements astx.Parser for TSX source.
 func (TSXParser) Parse(name string, src []byte) (*comment.File, error) {
-	return tree.Parse(name, src, sitter.NewLanguage(treesittertypescript.LanguageTSX()), spec)
+	return tree.Parse(name, src, sitter.NewLanguage(treesittertypescript.LanguageTSX()), _SPEC)
 }
 
 func commentKind(kind string) bool {
@@ -69,19 +69,19 @@ func directive(text string) bool {
 		strings.HasPrefix(body, "c8 ignore")
 }
 
-// classify marks a comment group Decl only when it is a root-level group
+// classify marks a comment group CLASS_DOC only when it is a root-level group
 // immediately followed by a named declaration. A blank line or an
 // intervening comment prevents doc attachment, as it does with go/ast.
 func classify(last *sitter.Node, endRow uint) comment.Class {
 	parent := last.Parent()
 	if parent == nil || parent.Kind() != "program" {
-		return comment.Inner
+		return comment.CLASS_COMMENT
 	}
 	next := last.NextNamedSibling()
 	if next == nil || next.StartPosition().Row != endRow+1 || !namedDeclaration(next) {
-		return comment.Inner
+		return comment.CLASS_COMMENT
 	}
-	return comment.Decl
+	return comment.CLASS_DOC
 }
 
 // namedDeclaration recognizes top-level named TypeScript declarations. The

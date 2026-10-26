@@ -13,7 +13,7 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"clwrap/command/walk"
+	"clwrap/command/internal/walk"
 	"clwrap/config"
 	"clwrap/package/astx"
 	"clwrap/package/rule"
