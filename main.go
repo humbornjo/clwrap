@@ -22,7 +22,7 @@ func main() {
 	(&cli.Command{
 		Name:      "clwrap",
 		Usage:     "reflow Go, TypeScript, Rust, and Zig line comments under the two-tier width rule",
-		UsageText: "clwrap [-w] [-dryrun] [--lang go|typescript|tsx|rust|zig] [-decl N] [-inner N] [-tolerance N] <file | dir | dir/... | ->...",
+		UsageText: "clwrap [-w] [-dryrun] [--lang go|typescript|tsx|rust|zig] [-doc-width N] [-comment-width N] [-tolerance N] <file | dir | dir/... | ->...",
 		Flags: append([]cli.Flag{
 			&cli.BoolFlag{
 				Name:    "write",
@@ -43,7 +43,7 @@ func main() {
 			{
 				Name:      "report",
 				Usage:     "report comment hygiene: the line change the reflow would make, per directory",
-				UsageText: "clwrap report [-limit N] [-decl N] [-inner N] [-tolerance N] <file | dir | dir/...>",
+				UsageText: "clwrap report [-limit N] [-doc-width N] [-comment-width N] [-tolerance N] <file | dir | dir/...>",
 				Flags: append([]cli.Flag{
 					&cli.IntFlag{
 						Name:  "limit",
@@ -63,7 +63,7 @@ func main() {
 func widthFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.IntFlag{
-			Name:  "decl",
+			Name:  "doc-width",
 			Value: 75,
 			Usage: "wrap width for top-level declaration doc comments",
 		},
@@ -73,7 +73,7 @@ func widthFlags() []cli.Flag {
 			Usage: "columns a boundary-straddling word may run past the decl width",
 		},
 		&cli.IntFlag{
-			Name:  "inner",
+			Name:  "comment-width",
 			Value: 120,
 			Usage: "wrap width for all other comments",
 		},

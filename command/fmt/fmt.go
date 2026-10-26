@@ -23,10 +23,10 @@ import (
 // failures on stderr and exiting 2 when any arg failed.
 func Run(_ context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() == 0 {
-		return cli.Exit("no input: clwrap [-w] [-dryrun] [-decl N] [-inner N] [-tolerance N] [--lang go|typescript|tsx|rust|zig] <file | dir | dir/... | ->...", 2)
+		return cli.Exit("no input: clwrap [-w] [-dryrun] [-doc-width N] [-comment-width N] [-tolerance N] [--lang go|typescript|tsx|rust|zig] <file | dir | dir/... | ->...", 2)
 	}
 	write, dry, cfg := cmd.Bool("write"), cmd.Bool("dryrun"), config.Default()
-	cfg.DocWidth, cfg.CommentWidth, cfg.Tolerance = cmd.Int("decl"), cmd.Int("inner"), cmd.Int("tolerance")
+	cfg.DocWidth, cfg.CommentWidth, cfg.Tolerance = cmd.Int("doc-width"), cmd.Int("comment-width"), cmd.Int("tolerance")
 	languageName := cmd.String("lang")
 
 	err := walk.Args(cmd.Args().Slice(), func(path string) error {

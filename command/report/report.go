@@ -44,10 +44,10 @@ func (s *stat) add(o *stat) {
 // arg failed.
 func Run(_ context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() == 0 {
-		return cli.Exit("no input: clwrap report [-limit N] [-decl N] [-inner N] [-tolerance N] <file | dir | dir/...>", 2)
+		return cli.Exit("no input: clwrap report [-limit N] [-doc-width N] [-comment-width N] [-tolerance N] <file | dir | dir/...>", 2)
 	}
 	cfg := config.Default()
-	cfg.DocWidth, cfg.CommentWidth, cfg.Tolerance = cmd.Int("decl"), cmd.Int("inner"), cmd.Int("tolerance")
+	cfg.DocWidth, cfg.CommentWidth, cfg.Tolerance = cmd.Int("doc-width"), cmd.Int("comment-width"), cmd.Int("tolerance")
 
 	stats := map[string]*stat{}
 	err := walk.Args(cmd.Args().Slice(), func(path string) error {
