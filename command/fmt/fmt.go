@@ -1,7 +1,7 @@
-// Package cmdfmt is the gommentlw command action: it walks the positional
+// Package cmdfmt is the clwrap command action: it walks the positional
 // args — files, directories, dir/... recursive patterns, and - for
-// standard input — and streams each source's comment areas through the
-// rule set.
+// standard input — and streams each supported source's comment areas
+// through the rules.
 package cmdfmt
 
 import (
@@ -13,24 +13,25 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"gommentlw/command/walk"
-	"gommentlw/config"
-	"gommentlw/package/astx"
-	"gommentlw/package/rule"
+	"clwrap/command/walk"
+	"clwrap/config"
+	"clwrap/package/astx"
+	"clwrap/package/rule"
 )
 
-// Run formats every positional arg the command received, reporting the
+// Run formats every positional arg the command received, reporting
 // failures on stderr and exiting 2 when any arg failed.
 func Run(_ context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() == 0 {
-		return cli.Exit("no input: gommentlw [-w] [-dryrun] [-decl N] [-inner N] [-tolerance N] [-list N] <file.go | dir | dir/... | ->...", 2)
+		return cli.Exit("no input: clwrap [-w] [-dryrun] [-decl N] [-inner N] [-tolerance N] [--lang go|typescript|tsx|rust|zig] <file | dir | dir/... | ->...", 2)
 	}
 	write, dry, cfg := cmd.Bool("write"), cmd.Bool("dryrun"), config.Default()
-	cfg.Decl, cfg.Inner, cfg.List, cfg.Tolerance = cmd.Int("decl"), cmd.Int("inner"), cmd.Int("list"), cmd.Int("tolerance")
+	cfg.DocWidth, cfg.CommentWidth, cfg.Tolerance = cmd.Int("decl"), cmd.Int("inner"), cmd.Int("tolerance")
+	languageName := cmd.String("lang")
 
 	err := walk.Args(cmd.Args().Slice(), func(path string) error {
 		if path == "-" {
-			return processStdin(cfg)
+			return processStdin(cfg, languageName)
 		}
 		return processFile(path, write, dry, cfg)
 	})
@@ -41,19 +42,22 @@ func Run(_ context.Context, cmd *cli.Command) error {
 	return nil
 }
 
-// processFile formats one file: dry mode lists the files whose comments
-// would change on stdout and writes nothing, stdout mode prints the
-// reflowed source, write mode rewrites changed files in place and lists
-// them on stderr.
+// processFile formats one file: dry mode lists files whose comments would
+// change on stdout and writes nothing, stdout mode prints reflowed source,
+// and write mode rewrites changed files in place and lists them on stderr.
 func processFile(path string, write, dry bool, cfg config.Config) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	out, err := format(path, src, cfg)
+	file, err := astx.Parse(path, src)
 	if err != nil {
 		return err
 	}
+	if err := rule.Apply(file, cfg); err != nil {
+		return err
+	}
+	out := file.Source()
 	if dry {
 		if !bytes.Equal(out, src) {
 			fmt.Fprintln(os.Stdout, path)
@@ -78,31 +82,24 @@ func processFile(path string, write, dry bool, cfg config.Config) error {
 	return nil
 }
 
-// processStdin formats standard input to standard output, the
-// editor-integration path: a buffer with a syntax error fails parse and
-// leaves the editor's buffer untouched.
-func processStdin(cfg config.Config) error {
+// processStdin formats standard input to standard output, the editor
+// integration path. Stdin remains Go by default; --lang selects another
+// registered grammar. A syntax error leaves the editor's buffer untouched.
+func processStdin(cfg config.Config, languageName string) error {
 	src, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		return err
 	}
-	out, err := format("stdin.go", src, cfg)
+	if languageName == "" {
+		languageName = "go"
+	}
+	file, err := astx.ParseAs(languageName, "stdin", src)
 	if err != nil {
 		return err
 	}
-	_, err = os.Stdout.Write(out)
+	if err := rule.Apply(file, cfg); err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(file.Source())
 	return err
-}
-
-// format runs the stream pipeline over one source buffer: parse the file,
-// pipe its comment areas through the rule set, render the result.
-func format(name string, src []byte, cfg config.Config) ([]byte, error) {
-	file, err := astx.ParseFile(name, src)
-	if err != nil {
-		return nil, err
-	}
-	if err := rule.Pipe(file, rule.Set{rule.List{Width: cfg.List}, rule.Width{Decl: cfg.Decl, Inner: cfg.Inner, Tolerance: cfg.Tolerance}}); err != nil {
-		return nil, err
-	}
-	return file.Source(), nil
 }

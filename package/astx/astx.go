@@ -1,216 +1,98 @@
-// Package astx wraps go/ast to stream a Go file's comment areas: ParseFile
-// yields a File whose Next hands out each reflowable comment run as an
-// Area — a single-shot io.Reader over the original text and a
-// single-shot io.Writer whose one write overrides the region — until
-// Next returns nil. Source then renders the file with every override
-// applied.
+// Package astx defines the source-parser contract and selects registered
+// language adapters by file extension or explicit language name.
 package astx
 
 import (
-	"bytes"
-	"errors"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"io"
-	"regexp"
+	"fmt"
+	"path/filepath"
 	"strings"
+
+	golang "clwrap/package/astx/lang/go"
+	"clwrap/package/astx/lang/rust"
+	"clwrap/package/astx/lang/typescript"
+	"clwrap/package/astx/lang/zig"
+	"clwrap/package/comment"
 )
 
-// Class is a comment area's tier under the two-tier width rule.
-type Class int
-
-const (
-	// CLASS_DECL marks doc comments of package-level named declarations: the
-	// package clause, top-level funcs, and the const/var/type specs of
-	// top-level declarations, grouped or not.
-	CLASS_DECL Class = iota
-	// CLASS_INNER marks every other standalone comment: function bodies,
-	// struct fields, interface methods.
-	CLASS_INNER
-)
-
-// Area is one comment run's source region: a maximal stretch of prose
-// lines between directive lines. Read streams the original text —
-// leading indent included — exactly once; the drained stream reports
-// io.EOF. Write accepts exactly one call, and the write overrides the
-// region: the bytes given replace the original text when the file renders.
-type Area interface {
-	io.Reader
-	io.Writer
-	// Class is the area's comment tier.
-	Class() Class
+// Parser extracts a language-neutral comment stream from one source
+// buffer. Language adapters under lang implement this interface.
+type Parser interface {
+	Parse(name string, src []byte) (*comment.File, error)
 }
 
-// File is a parsed Go source file's comment stream.
-type File struct {
-	src   []byte
-	areas []*area
-	next  int
+// registration associates one Parser implementation with the names and
+// file extensions that select it.
+type registration struct {
+	name       string
+	aliases    []string
+	extensions []string
+	parser     Parser
 }
 
-var GENERATED_MARKER = regexp.MustCompile(`(?m)^// Code generated .* DO NOT EDIT\.$`)
+var registrations = []registration{
+	{name: "go", extensions: []string{".go"}, parser: golang.Parser{}},
+	{name: "typescript", aliases: []string{"ts"}, extensions: []string{".ts", ".mts", ".cts"}, parser: typescript.Parser{}},
+	{name: "tsx", extensions: []string{".tsx"}, parser: typescript.TSXParser{}},
+	{name: "rust", extensions: []string{".rs"}, parser: rust.Parser{}},
+	{name: "zig", extensions: []string{".zig"}, parser: zig.Parser{}},
+}
 
-// ParseFile parses one Go source buffer into a comment stream. A generated
-// file parses into a File with no areas: its comments belong to the
-// generator, so the stream is drained from the start.
-func ParseFile(name string, src []byte) (*File, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, name, src, parser.ParseComments)
+// Supports reports whether path has an extension handled by a registered
+// language adapter.
+func Supports(path string) bool {
+	_, ok := forExtension(path)
+	return ok
+}
+
+// Parse selects an adapter from name's extension and parses src.
+func Parse(name string, src []byte) (*comment.File, error) {
+	registration, ok := forExtension(name)
+	if !ok {
+		return nil, fmt.Errorf("unsupported source file %q", name)
+	}
+	return registration.parser.Parse(name, src)
+}
+
+// ParseAs selects an adapter by explicit language name and parses src. The
+// canonical names are go, typescript, tsx, rust, and zig; ts aliases
+// typescript.
+func ParseAs(languageName, name string, src []byte) (*comment.File, error) {
+	languageName = strings.ToLower(languageName)
+	for i := range registrations {
+		registration := &registrations[i]
+		if languageName == registration.name {
+			return registration.parser.Parse(name, src)
+		}
+		for _, alias := range registration.aliases {
+			if languageName == alias {
+				return registration.parser.Parse(name, src)
+			}
+		}
+	}
+	return nil, fmt.Errorf("unsupported language %q (want go, typescript, tsx, rust, or zig)", languageName)
+}
+
+// CommentLines counts all lines occupied by comments in one source buffer,
+// including comments that are not reflowable.
+func CommentLines(name string, src []byte) (int, error) {
+	file, err := Parse(name, src)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	f := &File{src: src}
-	head := src
-	if len(head) > 4096 {
-		head = head[:4096]
-	}
-	if GENERATED_MARKER.Match(head) {
-		return f, nil
-	}
-	for _, group := range file.Comments {
-		f.areas = append(f.areas, extract(fset, file, src, group)...)
-	}
-	return f, nil
+	return file.CommentLines(), nil
 }
 
-// Next returns the file's next comment area, or nil once the stream is
-// drained.
-func (f *File) Next() Area {
-	if f.next >= len(f.areas) {
-		return nil
-	}
-	a := f.areas[f.next]
-	f.next++
-	return a
-}
-
-// Source renders the file with every overridden area's replacement
-// applied.
-func (f *File) Source() []byte {
-	out := f.src
-	for i := len(f.areas) - 1; i >= 0; i-- {
-		a := f.areas[i]
-		if !a.wrote || bytes.Equal(a.repl, a.src) {
-			continue
-		}
-		var b bytes.Buffer
-		b.Write(out[:a.start])
-		b.Write(a.repl)
-		b.Write(out[a.end:])
-		out = b.Bytes()
-	}
-	return out
-}
-
-// area is one comment run's source region: the original text plus the
-// single override, when written.
-type area struct {
-	class Class
-	start int
-	end   int
-	src   []byte
-	repl  []byte
-	off   int
-	wrote bool
-}
-
-// Class implements Area.
-func (a *area) Class() Class { return a.class }
-
-// Read implements Area: the original text streams out once, then the area
-// reports io.EOF.
-func (a *area) Read(p []byte) (int, error) {
-	if a.off >= len(a.src) {
-		return 0, io.EOF
-	}
-	n := copy(p, a.src[a.off:])
-	a.off += n
-	return n, nil
-}
-
-// Write implements Area: one write overrides the region's original text; a
-// second write fails.
-func (a *area) Write(p []byte) (int, error) {
-	if a.wrote {
-		return 0, errors.New("astx: comment area already overridden")
-	}
-	a.wrote = true
-	a.repl = bytes.Clone(p)
-	return len(p), nil
-}
-
-// extract lifts one comment group into its reflowable runs: block comments
-// and trailing comments sharing a code line keep their author's layout,
-// and a directive-style line splits the group — the prose runs between
-// directives reflow, the directive lines themselves stay untouched.
-func extract(fset *token.FileSet, file *ast.File, src []byte, group *ast.CommentGroup) []*area {
-	first := group.List[0]
-	if strings.HasPrefix(first.Text, "/*") {
-		return nil
-	}
-	pos := fset.Position(first.Slash)
-	if strings.TrimSpace(string(src[pos.Offset-(pos.Column-1):pos.Offset])) != "" {
-		return nil
-	}
-	class := classify(file, group)
-	var areas []*area
-	from, end := -1, 0
-	for _, c := range group.List {
-		if body := strings.TrimPrefix(c.Text, "//"); body != "" && !strings.HasPrefix(body, " ") {
-			if from >= 0 {
-				areas = append(areas, &area{class: class, start: from, end: end, src: src[from:end]})
-				from = -1
-			}
-			continue
-		}
-		if from < 0 {
-			slash := fset.Position(c.Slash)
-			from = slash.Offset - (slash.Column - 1)
-		}
-		end = fset.Position(c.End()).Offset
-	}
-	if from >= 0 {
-		areas = append(areas, &area{class: class, start: from, end: end, src: src[from:end]})
-	}
-	return areas
-}
-
-// classify reports the comment group's tier: doc comments attached to
-// package-level named declarations — the package clause, top-level
-// funcs, and the specs of top-level const/var/type declarations, grouped
-// or not — are CLASS_DECL.
-func classify(file *ast.File, group *ast.CommentGroup) Class {
-	if file.Doc == group {
-		return CLASS_DECL
-	}
-	for _, decl := range file.Decls {
-		switch d := decl.(type) {
-		case *ast.FuncDecl:
-			if d.Doc == group {
-				return CLASS_DECL
-			}
-		case *ast.GenDecl:
-			if d.Doc == group {
-				return CLASS_DECL
-			}
-			for _, spec := range d.Specs {
-				switch s := spec.(type) {
-				case *ast.ImportSpec:
-					if s.Doc == group {
-						return CLASS_DECL
-					}
-				case *ast.ValueSpec:
-					if s.Doc == group {
-						return CLASS_DECL
-					}
-				case *ast.TypeSpec:
-					if s.Doc == group {
-						return CLASS_DECL
-					}
-				}
+// forExtension finds the registration responsible for name's final
+// extension.
+func forExtension(name string) (*registration, bool) {
+	extension := strings.ToLower(filepath.Ext(name))
+	for i := range registrations {
+		registration := &registrations[i]
+		for _, candidate := range registration.extensions {
+			if extension == candidate {
+				return registration, true
 			}
 		}
 	}
-	return CLASS_INNER
+	return nil, false
 }

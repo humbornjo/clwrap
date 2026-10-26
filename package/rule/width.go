@@ -3,42 +3,44 @@ package rule
 import (
 	"strings"
 
-	"gommentlw/package/astx"
+	"clwrap/package/comment"
 )
 
 // Width joins a comment area's prose paragraphs and rewraps them to the
-// tier's boundary: CLASS_DECL holds to Decl, CLASS_INNER to Inner. A word
-// straddling the Decl boundary may end up to Tolerance columns past it; a
-// word starting past the boundary wraps. Paragraphs carrying their own
-// layout — code blocks, list items, link definitions — stay verbatim.
+// tier's boundary: Decl comments use the Decl width and Inner comments use
+// the Inner width. A word straddling the Decl boundary may end up to
+// Tolerance columns past it; a word starting past the boundary wraps.
+// Paragraphs with a line matching ExemptedPrefixes keep their author's
+// layout, as do numbered list items and link definitions.
 type Width struct {
-	Decl      int
-	Inner     int
-	Tolerance int
+	Decl             int
+	Inner            int
+	Tolerance        int
+	ExemptedPrefixes []string
 }
 
 // Rewrite implements Rule.
-func (w Width) Rewrite(class astx.Class, text string) string {
+func (w Width) Rewrite(class comment.Class, marker, text string) string {
 	boundary, tolerance := w.Inner, 0
-	if class == astx.CLASS_DECL {
+	if class == comment.Decl {
 		boundary, tolerance = w.Decl, w.Tolerance
 	}
-	indent, lines := areaLines(text)
-	textWidth := boundary - len(indent) - len("// ")
+	indent, lines := areaLines(text, marker)
+	textWidth := boundary - len(indent) - len(marker) - 1
 	if textWidth < 1 {
 		textWidth = 1
 	}
-	return strings.Join(verbatimLines(indent, mapParagraphs(lines, func(p []string) []string {
-		return reflowProse(p, textWidth, tolerance)
+	return strings.Join(verbatimLines(indent, marker, mapParagraphs(lines, func(p []string) []string {
+		return reflowProse(p, textWidth, tolerance, w.ExemptedPrefixes)
 	})), "\n")
 }
 
 // reflowProse joins a paragraph's lines and greedy-wraps the words under
-// the text width; a paragraph holding any structured line keeps its
-// author's layout.
-func reflowProse(lines []string, textWidth, tolerance int) []string {
+// the text width; a paragraph holding any exempted line keeps its author's
+// layout.
+func reflowProse(lines []string, textWidth, tolerance int, exemptedPrefixes []string) []string {
 	for _, line := range lines {
-		if !plainProse(line) {
+		if !plainProse(line, exemptedPrefixes) {
 			return lines
 		}
 	}

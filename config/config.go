@@ -1,23 +1,28 @@
-// Package config carries gommentlw's rule configuration: the two width
-// constraints of the comment tiers.
+// Package config carries clwrap's rule configuration: comment widths and
+// structured-line exemptions.
 package config
 
-// Config is gommentlw's rule configuration: the two width constraints of
-// the comment tiers plus the markdown list budget.
+// Config is clwrap's rule configuration: the two width constraints of the
+// comment tiers plus the structured-line exemptions.
 type Config struct {
-	// Decl bounds doc comments of package-level named declarations; a word straddling the boundary may end Decl+Tolerance
-	// columns out.
-	Decl int
-	// Tolerance is the Decl tier's straddle allowance.
+	// DocWidth bounds doc comments of package-level named declarations; a word straddling the boundary may end
+	// DocWidth+Tolerance columns out.
+	DocWidth int
+	// CommentWidth bounds every other standalone comment.
+	CommentWidth int
+	// ExemptedPrefixes identifies lines whose paragraphs keep their author's layout.
+	ExemptedPrefixes []string
+	// Tolerance is the doc tier's straddle allowance.
 	Tolerance int
-	// Inner bounds every other standalone comment.
-	Inner int
-	// List bounds markdown list items; 0 leaves them unbounded past the tier width.
-	List int
 }
 
-// Default is the house configuration: decl 75, inner 120, no tolerance,
-// inner 120, lists unbounded.
+// Default is the house configuration: doc width 75, comment width 120, no
+// tolerance, and the standard code-block and markdown bullet prefixes
+// exempt.
 func Default() Config {
-	return Config{Decl: 75, Inner: 120}
+	return Config{
+		DocWidth:         75,
+		CommentWidth:     120,
+		ExemptedPrefixes: []string{" ", "\t", "- ", "* ", "+ "},
+	}
 }

@@ -4,23 +4,26 @@ import (
 	"strings"
 	"testing"
 
-	"gommentlw/package/astx"
+	"clwrap/config"
+	golang "clwrap/package/astx/lang/go"
+	"clwrap/package/comment"
 )
 
 // pipeString runs one source fragment through the stream pipeline,
 // injecting a package clause when the fragment does not carry one.
-func pipeString(t *testing.T, src string, shortW, longW, listW int) string {
+func pipeString(t *testing.T, src string, shortW, longW int) string {
 	t.Helper()
 	full := strings.HasPrefix(src, "package ") || strings.Contains(src, "\npackage ")
 	if !full {
 		src = "package p\n\n" + src
 	}
-	file, err := astx.ParseFile("x.go", []byte(src))
+	file, err := (golang.Parser{}).Parse("x.go", []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	rules := Set{List{Width: listW}, Width{Decl: shortW, Inner: longW, Tolerance: 2}}
-	if err := Pipe(file, rules); err != nil {
+	cfg := config.Default()
+	cfg.DocWidth, cfg.CommentWidth, cfg.Tolerance = shortW, longW, 2
+	if err := Apply(file, cfg); err != nil {
 		t.Fatal(err)
 	}
 	text := string(file.Source())
@@ -37,7 +40,6 @@ func TestRule_Pipe(t *testing.T) {
 		want  string
 		short int
 		long  int
-		list  int
 	}{
 		{
 			name: "decl doc wraps short",
@@ -205,17 +207,6 @@ func TestRule_Pipe(t *testing.T) {
 			long:  100,
 		},
 		{
-			name: "list item wraps at the list constraint",
-			src: "//   - first item spread over two lines joins\n" +
-				"func f() {}\n",
-			want: "//   - first item spread over\n" +
-				"//     two lines joins\n" +
-				"func f() {}\n",
-			short: 60,
-			long:  100,
-			list:  30,
-		},
-		{
 			name: "prose-led paragraph keeps its layout",
 			src: "// Does things:\n" +
 				"//   - a sub item\n" +
@@ -239,13 +230,50 @@ func TestRule_Pipe(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := pipeString(t, tc.src, tc.short, tc.long, tc.list)
+			got := pipeString(t, tc.src, tc.short, tc.long)
 			if got != tc.want {
 				t.Fatalf("pipe:\n%s\nwant:\n%s", got, tc.want)
 			}
-			if again := pipeString(t, got, tc.short, tc.long, tc.list); again != got {
+			if again := pipeString(t, got, tc.short, tc.long); again != got {
 				t.Fatalf("not idempotent:\n%s\nthen:\n%s", got, again)
 			}
 		})
+	}
+}
+
+func TestRule_ExemptedPrefixes(t *testing.T) {
+	const src = "package p\n\n" +
+		"// Run demonstrates configurable prefix exemptions.\n" +
+		"//\n" +
+		"// > quoted text keeps\n" +
+		"// > its original layout.\n" +
+		"func Run() {}\n"
+	file, err := (golang.Parser{}).Parse("x.go", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	cfg.ExemptedPrefixes = append(cfg.ExemptedPrefixes, "> ")
+	if err := Apply(file, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(file.Source()); got != src {
+		t.Fatalf("source = %q, want unchanged %q", got, src)
+	}
+}
+
+func TestRule_Marker(t *testing.T) {
+	src := "# prose written\n# in narrow lines\n"
+	file := comment.NewFile([]byte(src), []comment.Region{{
+		Start:  0,
+		End:    len(src) - 1,
+		Class:  comment.Inner,
+		Marker: "#",
+	}}, 2)
+	if err := Pipe(file, Set{Width{Inner: 80}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(file.Source()), "# prose written in narrow lines\n"; got != want {
+		t.Fatalf("source = %q, want %q", got, want)
 	}
 }

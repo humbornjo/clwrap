@@ -1,7 +1,7 @@
-// Package cmdreport is the gommentlw report command: it walks the
-// positional args the way the fmt command does and, without writing
-// anything, summarizes the comment-line change the reflow would make,
-// grouped by Go package — tokei style, the most changed packages first.
+// Package cmdreport is the clwrap report command: it walks the positional
+// args the way the fmt command does and, without writing anything,
+// summarizes the comment-line change the reflow would make, grouped by
+// directory — tokei style, the most changed directories first.
 package cmdreport
 
 import (
@@ -9,8 +9,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go/parser"
-	"go/token"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,15 +18,15 @@ import (
 	"github.com/urfave/cli/v3"
 	"golang.org/x/term"
 
-	"gommentlw/command/walk"
-	"gommentlw/config"
-	"gommentlw/package/astx"
-	"gommentlw/package/rule"
+	"clwrap/command/walk"
+	"clwrap/config"
+	"clwrap/package/astx"
+	"clwrap/package/rule"
 )
 
-// stat accumulates one package's comment hygiene: the .go files seen, the
-// files the reflow would rewrite, and the comment lines before and after
-// it.
+// stat accumulates one directory's comment hygiene: the supported source
+// files seen, the files the reflow would rewrite, and the comment lines
+// before and after it.
 type stat struct {
 	files  int
 	dirty  int
@@ -36,20 +34,20 @@ type stat struct {
 	after  int
 }
 
-// add folds another package's tally into s.
+// add folds another directory's tally into s.
 func (s *stat) add(o *stat) {
 	s.files, s.dirty, s.before, s.after = s.files+o.files, s.dirty+o.dirty, s.before+o.before, s.after+o.after
 }
 
 // Run tallies every positional arg the command received and renders the
-// per-package table, reporting the failures on stderr and exiting 2 when
-// any arg failed.
+// per-directory table, reporting failures on stderr and exiting 2 when any
+// arg failed.
 func Run(_ context.Context, cmd *cli.Command) error {
 	if cmd.Args().Len() == 0 {
-		return cli.Exit("no input: gommentlw report [-limit N] [-decl N] [-inner N] [-tolerance N] [-list N] <file.go | dir | dir/...>", 2)
+		return cli.Exit("no input: clwrap report [-limit N] [-decl N] [-inner N] [-tolerance N] <file | dir | dir/...>", 2)
 	}
 	cfg := config.Default()
-	cfg.Decl, cfg.Inner, cfg.List, cfg.Tolerance = cmd.Int("decl"), cmd.Int("inner"), cmd.Int("list"), cmd.Int("tolerance")
+	cfg.DocWidth, cfg.CommentWidth, cfg.Tolerance = cmd.Int("decl"), cmd.Int("inner"), cmd.Int("tolerance")
 
 	stats := map[string]*stat{}
 	err := walk.Args(cmd.Args().Slice(), func(path string) error {
@@ -72,21 +70,22 @@ func Run(_ context.Context, cmd *cli.Command) error {
 }
 
 // collect formats one file in memory and folds its comment-line change
-// into its package's tally; the package key is the file's directory.
+// into its directory's tally.
 func collect(path string, cfg config.Config, stats map[string]*stat) error {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	before, err := commentLines(path, src)
+	file, err := astx.Parse(path, src)
 	if err != nil {
 		return err
 	}
-	out, err := format(path, src, cfg)
-	if err != nil {
+	before := file.CommentLines()
+	if err := rule.Apply(file, cfg); err != nil {
 		return err
 	}
-	after, err := commentLines(path, out)
+	out := file.Source()
+	after, err := astx.CommentLines(path, out)
 	if err != nil {
 		return err
 	}
@@ -105,34 +104,6 @@ func collect(path string, cfg config.Config, stats map[string]*stat) error {
 	return nil
 }
 
-// commentLines counts the lines comments occupy in one source buffer: each
-// comment group contributes its line span, doc to end.
-func commentLines(name string, src []byte) (int, error) {
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, name, src, parser.ParseComments)
-	if err != nil {
-		return 0, err
-	}
-	n := 0
-	for _, group := range file.Comments {
-		n += fset.Position(group.End()).Line - fset.Position(group.Pos()).Line + 1
-	}
-	return n, nil
-}
-
-// format composes the same stream pipeline the fmt command runs: parse the
-// file, pipe its comment areas through the rule set, render.
-func format(name string, src []byte, cfg config.Config) ([]byte, error) {
-	file, err := astx.ParseFile(name, src)
-	if err != nil {
-		return nil, err
-	}
-	if err := rule.Pipe(file, rule.Set{rule.List{Width: cfg.List}, rule.Width{Decl: cfg.Decl, Inner: cfg.Inner, Tolerance: cfg.Tolerance}}); err != nil {
-		return nil, err
-	}
-	return file.Source(), nil
-}
-
 // Column widths, tokei's: Files is narrower than the rest, and the name
 // column takes the terminal width left over by the numbers and gaps (63).
 const (
@@ -141,8 +112,8 @@ const (
 )
 
 // table renders the report tokei style: ━ separators spanning the
-// terminal width, the header in bold blue, package names in bold magenta,
-// and the total's numbers in blue — colors only on a terminal.
+// terminal width, the header in bold blue, directory names in bold
+// magenta, and the total's numbers in blue — colors only on a terminal.
 type table struct {
 	w     io.Writer
 	color bool
@@ -152,7 +123,7 @@ type table struct {
 
 // newTable sizes the name column so the table fills columns wide.
 func newTable(w io.Writer, columns int, color bool) *table {
-	return &table{w: w, color: color, nw: max(columns-63, len("Package")), sep: strings.Repeat("━", columns)}
+	return &table{w: w, color: color, nw: max(columns-63, len("Directory")), sep: strings.Repeat("━", columns)}
 }
 
 // paint wraps s in an ANSI color when the table renders to a terminal.
@@ -167,7 +138,7 @@ func (t *table) paint(code, s string) string {
 func (t *table) header() {
 	fmt.Fprintln(t.w, t.sep)
 	fmt.Fprintf(t.w, " %s %s %s %s %s %s\n",
-		t.paint("1;34", fmt.Sprintf("%-*s", t.nw, "Package")),
+		t.paint("1;34", fmt.Sprintf("%-*s", t.nw, "Directory")),
 		t.paint("1;34", fmt.Sprintf("%*s", filesWidth, "Files")),
 		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Dirty")),
 		t.paint("1;34", fmt.Sprintf("%*s", numWidth, "Before")),
@@ -177,7 +148,7 @@ func (t *table) header() {
 	fmt.Fprintln(t.w, t.sep)
 }
 
-// line prints one tally row: the package name in bold magenta, truncated
+// line prints one tally row: the directory name in bold magenta, truncated
 // with a trailing | when it overflows as tokei does, the numbers plain —
 // or blue on the total row — and the diff signed when nonzero.
 func (t *table) line(name string, s *stat, total bool) {
@@ -202,9 +173,10 @@ func (t *table) line(name string, s *stat, total bool) {
 	)
 }
 
-// render prints the per-package table: the limit most changed packages in
-// descending order, an "other" row folding the rest away, and the total
-// over every package seen between two rules. A limit of 0 shows all.
+// render prints the per-directory table: the limit most changed
+// directories in descending order, an "other" row folding the rest away,
+// and the total over every directory seen between two rules. A limit of 0
+// shows all.
 func render(w io.Writer, stats map[string]*stat, limit, columns int, color bool) {
 	type row struct {
 		name string
@@ -242,9 +214,9 @@ func render(w io.Writer, stats map[string]*stat, limit, columns int, color bool)
 	for _, r := range rows {
 		total.add(r.s)
 	}
-	otherName := fmt.Sprintf("other (%d packages)", len(rows)-len(shown))
+	otherName := fmt.Sprintf("other (%d directories)", len(rows)-len(shown))
 	if len(rows)-len(shown) == 1 {
-		otherName = "other (1 package)"
+		otherName = "other (1 directory)"
 	}
 
 	t := newTable(w, columns, color)
