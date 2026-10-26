@@ -14,7 +14,8 @@ import (
 type Class int
 
 const (
-	// CLASS_DOC marks documentation attached to a top-level named declaration.
+	// CLASS_DOC marks documentation attached to a top-level named
+	// declaration.
 	CLASS_DOC Class = iota
 	// CLASS_COMMENT marks every other standalone comment.
 	CLASS_COMMENT

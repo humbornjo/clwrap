@@ -61,8 +61,9 @@ func directive(text string) bool {
 	return strings.HasPrefix(body, "rustfmt::")
 }
 
-// classify marks a root-level comment group CLASS_DOC when a named item follows
-// it. Outer attributes may sit between the documentation and its item.
+// classify marks a root-level comment group CLASS_DOC when a named item
+// follows it. Outer attributes may sit between the documentation and its
+// item.
 func classify(last *sitter.Node, endRow uint) comment.Class {
 	parent := last.Parent()
 	if parent == nil || parent.Kind() != "source_file" {

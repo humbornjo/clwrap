@@ -1,4 +1,5 @@
-// Package tree shares Tree-sitter comment extraction among language adapters.
+// Package tree shares Tree-sitter comment extraction among language
+// adapters.
 package tree
 
 import (
@@ -10,7 +11,8 @@ import (
 	"clwrap/package/comment"
 )
 
-// Spec describes the language-specific parts of Tree-sitter comment extraction.
+// Spec describes the language-specific parts of Tree-sitter comment
+// extraction.
 type Spec struct {
 	// Name identifies the language in parse errors.
 	Name string
@@ -24,8 +26,8 @@ type Spec struct {
 	Classify func(last *sitter.Node, endRow uint) comment.Class
 }
 
-// Parse builds a comment stream from src using language and spec. Syntax errors
-// reject the whole source so an editor buffer can remain unchanged.
+// Parse builds a comment stream from src using language and spec. Syntax
+// errors reject the whole source so an editor buffer can remain unchanged.
 func Parse(name string, src []byte, language *sitter.Language, spec Spec) (*comment.File, error) {
 	parser := sitter.NewParser()
 	defer parser.Close()
@@ -49,7 +51,8 @@ func Parse(name string, src []byte, language *sitter.Language, spec Spec) (*comm
 }
 
 // commentNodes collects every comment in source order. The cursor remains
-// valid until all regions and report metadata have been copied out of the tree.
+// valid until all regions and report metadata have been copied out of the
+// tree.
 func commentNodes(root *sitter.Node, isComment func(string) bool) []sitter.Node {
 	cursor := root.Walk()
 	defer cursor.Close()
@@ -70,8 +73,9 @@ func commentNodes(root *sitter.Node, isComment func(string) bool) []sitter.Node 
 	}
 }
 
-// extractRegions groups consecutive standalone line comments, then splits each
-// group around directives and marker changes. Other comments never reflow.
+// extractRegions groups consecutive standalone line comments, then splits
+// each group around directives and marker changes. Other comments never
+// reflow.
 func extractRegions(src []byte, nodes []sitter.Node, spec Spec) []comment.Region {
 	var regions []comment.Region
 	for i := 0; i < len(nodes); {
@@ -89,8 +93,8 @@ func extractRegions(src []byte, nodes []sitter.Node, spec Spec) []comment.Region
 	return regions
 }
 
-// standaloneLine reports whether node is a supported line comment alone on its
-// source line.
+// standaloneLine reports whether node is a supported line comment alone on
+// its source line.
 func standaloneLine(src []byte, node *sitter.Node, marker func(string) string) bool {
 	start := int(node.StartByte())
 	if marker(node.Utf8Text(src)) == "" {
@@ -99,8 +103,8 @@ func standaloneLine(src []byte, node *sitter.Node, marker func(string) string) b
 	return len(bytes.TrimSpace(src[lineStart(src, start):start])) == 0
 }
 
-// adjacentLines reports whether two comments occupy consecutive lines with no
-// code between them.
+// adjacentLines reports whether two comments occupy consecutive lines with
+// no code between them.
 func adjacentLines(src []byte, previous, current *sitter.Node) bool {
 	previousEnd, previousRow := commentEnd(src, previous)
 	if current.StartPosition().Row != previousRow+1 {
@@ -109,8 +113,9 @@ func adjacentLines(src []byte, previous, current *sitter.Node) bool {
 	return len(bytes.TrimSpace(src[previousEnd:int(current.StartByte())])) == 0
 }
 
-// extractGroup turns prose runs between directives into source regions. Each
-// run retains its exact line-comment marker for the language-neutral rules.
+// extractGroup turns prose runs between directives into source regions.
+// Each run retains its exact line-comment marker for the language-neutral
+// rules.
 func extractGroup(src []byte, group []sitter.Node, spec Spec) []comment.Region {
 	last := &group[len(group)-1]
 	_, lastRow := commentEnd(src, last)
@@ -162,7 +167,8 @@ func commentEnd(src []byte, node *sitter.Node) (int, uint) {
 	return end, row
 }
 
-// lineStart returns the byte offset immediately after the preceding newline.
+// lineStart returns the byte offset immediately after the preceding
+// newline.
 func lineStart(src []byte, offset int) int {
 	return bytes.LastIndexByte(src[:offset], '\n') + 1
 }

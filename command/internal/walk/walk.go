@@ -1,6 +1,6 @@
-// Package walk expands clwrap's positional args — files, directories, and
-// dir/... recursive patterns — into the supported source files they name,
-// passing "-" through verbatim for the caller's stdin path.
+// Package walk expands clwrap's positional args — files, directories,
+// and dir/... recursive patterns — into the supported source files they
+// name, passing "-" through verbatim for the caller's stdin path.
 package walk
 
 import (
@@ -14,8 +14,8 @@ import (
 )
 
 // Args calls fn for each input in arg order: a file arg as given, every
-// supported source file beneath a directory arg, and "-" unchanged. Each fn
-// failure joins into the returned error; walking continues past it.
+// supported source file beneath a directory arg, and "-" unchanged. Each
+// fn failure joins into the returned error; walking continues past it.
 func Args(args []string, fn func(path string) error) error {
 	var errs []error
 	for _, arg := range args {
@@ -44,9 +44,9 @@ func Args(args []string, fn func(path string) error) error {
 	return errors.Join(errs...)
 }
 
-// dir calls fn for every supported source file beneath root. Dependency and
-// test-fixture directories are skipped, along with dot/underscore directories
-// per the go tool convention.
+// dir calls fn for every supported source file beneath root. Dependency
+// and test-fixture directories are skipped, along with dot/underscore
+// directories per the go tool convention.
 func dir(root string, fn func(path string) error) error {
 	var errs []error
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

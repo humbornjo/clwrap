@@ -1,10 +1,11 @@
-// Command clwrap reflows Go, TypeScript, Rust, and Zig line comments
-// under two width constraints. Documentation attached to top-level named
+// Command clwrap reflows Go, TypeScript, Rust, and Zig line comments under
+// two width constraints. Documentation attached to top-level named
 // declarations wraps to the short width, with an optional straddle
-// tolerance; every other standalone comment wraps to the long width. Markdown
-// list items join into one line each. Trailing comments, block comments, and
-// language-specific directive lines keep their author's layout. The report
-// subcommand summarizes comment-line changes per directory.
+// tolerance; every other standalone comment wraps to the long width.
+// Markdown list items join into one line each. Trailing comments, block
+// comments, and language-specific directive lines keep their author's
+// layout. The report subcommand summarizes comment-line changes per
+// directory.
 package main
 
 import (

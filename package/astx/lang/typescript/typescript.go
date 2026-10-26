@@ -69,8 +69,8 @@ func directive(text string) bool {
 		strings.HasPrefix(body, "c8 ignore")
 }
 
-// classify marks a comment group CLASS_DOC only when it is a root-level group
-// immediately followed by a named declaration. A blank line or an
+// classify marks a comment group CLASS_DOC only when it is a root-level
+// group immediately followed by a named declaration. A blank line or an
 // intervening comment prevents doc attachment, as it does with go/ast.
 func classify(last *sitter.Node, endRow uint) comment.Class {
 	parent := last.Parent()

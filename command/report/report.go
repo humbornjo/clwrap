@@ -173,10 +173,10 @@ func (t *table) line(name string, s *stat, total bool) {
 	)
 }
 
-// render prints the most changed directories in descending order, an "other"
-// row folding away those beyond limit, and the total over every directory
-// seen. Unchanged directories only contribute to the total. A limit of 0 shows
-// all changed directories.
+// render prints the most changed directories in descending order, an
+// "other" row folding away those beyond limit, and the total over every
+// directory seen. Unchanged directories only contribute to the total. A
+// limit of 0 shows all changed directories.
 func render(w io.Writer, stats map[string]*stat, limit, columns int, color bool) {
 	type row struct {
 		name string

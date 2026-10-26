@@ -8,10 +8,10 @@ import (
 
 // Width joins a comment area's prose paragraphs and rewraps them to the
 // tier's boundary: doc comments use the Decl width and other standalone
-// comments use the Inner width. A word straddling the Decl boundary may end
-// up to Tolerance columns past it; a word starting past the boundary wraps.
-// Paragraphs with a line matching ExemptedPrefixes keep their author's
-// layout, as do numbered list items and link definitions.
+// comments use the Inner width. A word straddling the Decl boundary may
+// end up to Tolerance columns past it; a word starting past the boundary
+// wraps. Paragraphs with a line matching ExemptedPrefixes keep their
+// author's layout, as do numbered list items and link definitions.
 type Width struct {
 	Decl             int
 	Inner            int

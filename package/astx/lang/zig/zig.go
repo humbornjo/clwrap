@@ -34,7 +34,8 @@ func commentKind(kind string) bool {
 }
 
 // marker distinguishes Zig declaration and container doc comments from
-// ordinary // comments. Four or more slashes are ordinary and stay verbatim.
+// ordinary // comments. Four or more slashes are ordinary and stay
+// verbatim.
 func marker(text string) string {
 	switch {
 	case strings.HasPrefix(text, "////"):
